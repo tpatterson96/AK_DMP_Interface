@@ -378,7 +378,7 @@ function defaultState(){
          updateDate:"", updaterFirstName:"", updaterLastName:"", updaterEmail:"",
          submitDate:"", dmFirstName:"", dmLastName:"", dmEmail:"", documentPath:""},
     project:{region:"", programs:[], costCenters:[], title:"", startDate:"", endDate:"", ongoing:false,
-             abstract:"", purpose:"", keywords:"", uidList:"", spatialDesc:"", spatialURL:""},
+             abstract:"", purpose:"", purposeSelections:{}, purposeOtherText:"", keywords:"", uidList:"", spatialDesc:"", spatialURL:""},
     contacts:{
       primary:emptyContact(), steward:emptyContact(),
       custodian:Object.assign(emptyContact(),{nonDOI:false}),
@@ -414,6 +414,34 @@ const OPT_REGION = ["1 – Pacific Region","2 – Southwest Region","3 – Midwe
 
 const OPT_PROGRAM = ["Ecological Services","Fish and Aquatic Conservation","Migratory Birds",
   "National Wildlife Refuge System","Office of Subsistence Management","Science Applications"];
+
+// Purpose checkbox options (Project Details -> Purpose). Selected items'
+// full text is joined together (one per line) to build project.purpose,
+// which maps to mdJSON metadata.resourceInfo.purpose -- see
+// recomputePurposeText() in buildProjectPanel. "other" is handled as its
+// own checkbox + free-text field rather than living in this list.
+const PURPOSE_OPTIONS = [
+  {key:'harvestStrategy', text:'Formal described or derived harvest strategy: project provides input into a model or compared to a threshold to set harvest regulations'},
+  {key:'esaListing', text:'ESA listing decision: project contributes or is cited in an Endangered Species Act listing decision'},
+  {key:'speciesStatusAssessment', text:'Species Status Assessment: project contributes or is cited in a Species Status Assessment'},
+  {key:'permittedSpeciesAssessment', text:'Assessment of the status of permitted species or permitting; project is used in an analysis to estimate allowable take or to issue permits'},
+  {key:'mbpFinancialAwards', text:'MBP Financial awards: project is used by Migratory Bird Program to allocate funds for conservation or habitat management'},
+  {key:'damageAssessment', text:'Damage Assessment: project is used to evaluate damages under a Natural Resource Damage Assessment'},
+  {key:'environmentalImpactAssessment', text:'Environmental Impact Assessment: project is used to conduct Environmental Impact Assessments under the National Environmental Policy Act'},
+  {key:'prioritizedSpeciesListings', text:'Prioritized species listings: project is used to determine if a species should be added to a recognized conservation list'},
+  {key:'managementActionEvaluation', text:'Evaluation of the impact of management actions (e.g., Refuge staff)'},
+  {key:'landAcquisition', text:'Land acquisition: project is used by land management agencies to acquire land through easement, lease, or purchase'},
+  {key:'damageResponsePlanning', text:'Damage response planning: project is used in products created to guide response to disasters and accidents (e.g., National Oceanic & Atmospheric Administration coastal resource maps to aid oil spill response)'},
+  {key:'informalHarvestManagement', text:'Informal harvest management: project is considered in harvest management decisions in the absence of a formal model or threshold value'},
+  {key:'habitatManagement', text:'Habitat management: project is used to guide ongoing habitat management (e.g., decisions about mowing, burning, planting, or water diversion)'},
+  {key:'conservationAreaIdentification', text:'Identification of areas of conservation value: project is used in maps and other products to identify areas of conservation concern or for protection'},
+  {key:'statusTrendsMonitoring', text:'Status & Trends monitoring: project is used to monitor a population and identify population sizes or changes in population size requiring conservation action or control'},
+  {key:'scientificAnalysis', text:'Scientific analysis: project is used for research to understand the biology or ecology of a migratory bird species'},
+  {key:'largeRangeCoverage', text:'The area covered includes a large proportion of the species\' breeding or wintering range or staging and migration areas utilized by the majority of the population; significant areas might also be defined for population sub-groups of management importance (e.g., stocks or sub-species).'},
+  {key:'longTimeSeries', text:'The project is part of a long time series on the life history of the species or habitat with a run of at least 10 years. The methods of data collection are sufficiently consistent, so that the data can be calibrated and analyzed as a single time series.'},
+  {key:'onlyAvailableData', text:'The project represents the only information being collected, i.e., no other data are available describing a species status, trend, or distribution, or there are no other data available describing the characteristics of an area/habitat and its use by migratory birds.'},
+  {key:'significantSpeciesCount', text:'The project represents a significant number of species (five or more)'}
+];
 
 const OPT_META_OTHER = ["Not Applicable","CSDGM (FGDC)","Dublin Core","ISO 19115-1","ISO 19115-2","ISO 19115-3",
   "POD (Project Open Data) / DCAT 2014"];
@@ -913,6 +941,40 @@ function computeCostCenterOptions(){
   });
   options.sort();
   return options;
+}
+
+// Extracts the CCCode from a "OrgName (CCCode)" cost center display label
+// (the format built by computeCostCenterOptions() above). Matches the LAST
+// parenthetical group specifically, so an OrgName that itself happens to
+// contain parentheses doesn't break the split.
+function _ccCodeFromCostCenterLabel(label){
+  const m = String(label || '').match(/\(([^()]+)\)\s*$/);
+  return m ? m[1] : null;
+}
+
+// Builds metadata.resourceInfo.credit entries -- one "OrgName_CCCode_OrgCode"
+// string per selected Cost Center -- by matching each cost center's CCCode
+// against the currently-loaded CMT.csv. Returns [] (and logs a warning per
+// unmatched entry) if CMT.csv isn't loaded or a code can't be found, rather
+// than failing the whole export -- credit is supplementary, not required.
+function computeCostCenterCredits(){
+  const codes = (state.project.costCenters || []).map(_ccCodeFromCostCenterLabel).filter(Boolean);
+  if(codes.length === 0) return [];
+  if(!CMT_DATA){
+    metadataGenWarnings.push('CMT.csv is not loaded -- metadata.resourceInfo.credit could not be populated from Cost Center selections.');
+    return [];
+  }
+  const credits = [];
+  codes.forEach(code => {
+    const row = CMT_DATA.find(r => (r.CCCode || '') === code);
+    if(row){
+      const orgCode = (row.OrgCode || '').trim() || '99999';
+      credits.push((row.OrgName || '') + '_' + code + '_' + orgCode);
+    } else {
+      metadataGenWarnings.push('No CMT.csv match found for Cost Center code "' + code + '" -- skipped in metadata.resourceInfo.credit.');
+    }
+  });
+  return credits;
 }
 
 /* =========================================================================
@@ -1734,8 +1796,58 @@ function buildProjectPanel(idx){
     fieldWrap('Project abstract', true, 'Consider copying and pasting this from the project proposal or investigation plan.', textareaInput(proj,'abstract',{rows:5}))
   ]));
 
-  p.appendChild(card('Purpose', 'Optional. A brief statement of why the project or its data are being collected — distinct from the Abstract, which summarizes what the project is. Maps to the mdJSON metadata.resourceInfo.purpose field.', [
-    fieldWrap('Project purpose', false, 'e.g. "To inform harvest management decisions for Pacific walrus by documenting current haulout use."', textareaInput(proj,'purpose',{rows:3}))
+  const purposeContainer = h('div');
+  const purposePreview = h('div', {class:'note', style:'white-space:pre-wrap;'});
+  const purposeOtherWrap = h('div', {id:'purpose-other-wrap'});
+
+  function refreshPurposePreview(){
+    purposePreview.textContent = proj.purpose
+      ? proj.purpose
+      : 'No purpose selected yet. This field stays blank in exported metadata until at least one box is checked (or "Other" is filled in).';
+  }
+
+  // Rebuilds project.purpose (-> mdJSON resourceInfo.purpose) from whichever
+  // boxes are currently checked. Only runs on an actual checkbox/text
+  // change -- never automatically on panel (re)build -- so opening an
+  // older saved DMP that has manually-typed purpose text (from before this
+  // checkbox UI existed) doesn't get silently wiped out just by viewing
+  // this tab. Manually-typed legacy text is overwritten the first time the
+  // person interacts with any box here, same as re-deriving from scratch.
+  function recomputePurposeText(){
+    const lines = [];
+    PURPOSE_OPTIONS.forEach(opt => {
+      if(proj.purposeSelections[opt.key]) lines.push(opt.text);
+    });
+    if(proj.purposeSelections.other && (proj.purposeOtherText || '').trim()){
+      lines.push('Other: ' + proj.purposeOtherText.trim());
+    }
+    proj.purpose = lines.join('\n');
+    refreshPurposePreview();
+    onDirty();
+  }
+
+  function buildPurposeOtherField(){
+    purposeOtherWrap.innerHTML = '';
+    if(proj.purposeSelections.other){
+      const inp = h('textarea', {rows:2, placeholder:'Describe the other use...'});
+      inp.value = proj.purposeOtherText || '';
+      inp.addEventListener('input', () => { proj.purposeOtherText = inp.value; recomputePurposeText(); });
+      purposeOtherWrap.appendChild(fieldWrap('Describe the other use', false, null, inp));
+    }
+  }
+
+  PURPOSE_OPTIONS.forEach(opt => {
+    purposeContainer.appendChild(checkboxRow(opt.text, null, proj.purposeSelections, opt.key, {onChange: recomputePurposeText}));
+  });
+  purposeContainer.appendChild(checkboxRow('Other', null, proj.purposeSelections, 'other', {onChange: () => { buildPurposeOtherField(); recomputePurposeText(); }}));
+  purposeContainer.appendChild(purposeOtherWrap);
+  buildPurposeOtherField();
+  refreshPurposePreview();
+
+  p.appendChild(card('Purpose', 'Please check the usage description(s) that are relevant for this investigation. Checking any box (re)builds the Purpose text below from the selected descriptions -- distinct from the Abstract, which summarizes what the project is. Maps to the mdJSON metadata.resourceInfo.purpose field.', [
+    purposeContainer,
+    h('div', {class:'subsection-label'}, ['Preview of Purpose metadata text']),
+    purposePreview
   ]));
 
   p.appendChild(card('Keywords', null, [
@@ -2502,7 +2614,7 @@ function buildSetupPanel(){
   /* ---- Cost Center filtering (CMT.csv only -- FWS Region/Program are hardcoded, see script) ---- */
   const cmtCard = h('div', {class:'card'});
   cmtCard.appendChild(h('h3',{},['Cost Center Directory (CMT.csv)']));
-  cmtCard.appendChild(h('p',{class:'card-desc'},['Used to filter the Cost Center dropdown on Project Details by the project\u2019s selected FWS Region and Program(s). Expects columns including CCCode, CMT_CCCode5, Region, OrgName, Program, and Active. The FWS Program \u2192 CMT_CCCode5 letter mapping is derived automatically from this file\u2019s own Program and CMT_CCCode5 columns \u2014 nothing else needs to be loaded or configured for Program-based filtering to work.']));
+  cmtCard.appendChild(h('p',{class:'card-desc'},['Used to filter the Cost Center dropdown on Project Details by the project\u2019s selected FWS Region and Program(s), and to populate metadata.resourceInfo.credit on export (see Review & Export). Expects columns including CCCode, CMT_CCCode5, Region, OrgName, OrgCode, Program, and Active. The FWS Program \u2192 CMT_CCCode5 letter mapping is derived automatically from this file\u2019s own Program and CMT_CCCode5 columns \u2014 nothing else needs to be loaded or configured for Program-based filtering to work.']));
   cmtCard.appendChild(buildFileUrlLoader({
     label: 'CMT.csv',
     desc: 'Cost center directory export.',
@@ -2516,7 +2628,7 @@ function buildSetupPanel(){
         toast('That file does not look like CMT.csv (expected CCCode and Region columns).');
         return;
       }
-      CMT_DATA = rows.map(r => ({CCCode: r.CCCode || '', CMT_CCCode5: r.CMT_CCCode5 || '', Region: r.Region || '', OrgName: r.OrgName || '', Program: r.Program || '', Active: r.Active}));
+      CMT_DATA = rows.map(r => ({CCCode: r.CCCode || '', CMT_CCCode5: r.CMT_CCCode5 || '', Region: r.Region || '', OrgName: r.OrgName || '', OrgCode: r.OrgCode || '', Program: r.Program || '', Active: r.Active}));
       CMT_DATA_SOURCE = sourceLabel;
       deriveProgramCodeMap();
       saveMetadataGenToStorage();
@@ -3101,7 +3213,10 @@ function buildProjectRecord(resolved, projectUuid, productUuids){
         metadataContact: metadataContact.length ? metadataContact : undefined,
         metadataDate: [{date: new Date().toISOString(), dateType: 'creation'}, {date: new Date().toISOString(), dateType: 'lastUpdate'}],
         metadataIdentifier: {identifier: projectUuid, namespace: 'urn:uuid'},
-        metadataStatus: 'initiated'
+        metadataStatus: 'initiated',
+        // Default metadata review frequency -- see resourceMaintenance
+        // note below for rationale; mirrors the notebook's default.
+        metadataMaintenance: {frequency: 'asNeeded'}
       },
       resourceDistribution: resourceDistribution,
       resourceInfo: {
@@ -3118,7 +3233,15 @@ function buildProjectRecord(resolved, projectUuid, productUuids){
         resourceType: [{name: state.distribution.shortTitle || proj.title || 'Untitled project', type: 'project'}],
         status: [projectStatus],
         timePeriod: timePeriod,
-        extent: extent
+        extent: extent,
+        // "OrgName_CCCode_OrgCode" per selected Cost Center, matched
+        // against CMT.csv loaded on the Setup tab.
+        credit: (() => { const c = computeCostCenterCredits(); return c.length ? c : undefined; })(),
+        // Default maintenance frequency -- mirrors the notebook's
+        // maintenance-defaults cell (inserted after the Purpose cell).
+        // "asNeeded" is mdJSON's MD_MaintenanceFrequencyCode value for
+        // "As Needed".
+        resourceMaintenance: [{maintenanceFrequency: 'asNeeded'}]
       },
       associatedResource: productUuids.length ? productUuids.map(u => ({associationType: 'product', mdRecordId: u})) : undefined
     }
@@ -3179,7 +3302,8 @@ function buildProductRecord(resolved, prod, productUuid, projectUuid){
         metadataStatus: 'initiated',
         defaultMetadataLocale: {language: 'eng', characterSet: 'UTF-8', country: 'USA'},
         metadataContact: metadataContact.length ? metadataContact : undefined,
-        metadataDate: [{date: new Date().toISOString(), dateType: 'creation'}, {date: new Date().toISOString(), dateType: 'lastUpdate'}]
+        metadataDate: [{date: new Date().toISOString(), dateType: 'creation'}, {date: new Date().toISOString(), dateType: 'lastUpdate'}],
+        metadataMaintenance: {frequency: 'asNeeded'}
       },
       resourceInfo: {
         resourceType: [{type: prod.resourceType || undefined, name: prod.name || prod.title || 'Untitled product'}],
@@ -3189,7 +3313,8 @@ function buildProductRecord(resolved, prod, productUuid, projectUuid){
         defaultResourceLocale: {language: 'eng', characterSet: 'UTF-8', country: 'USA'},
         pointOfContact: pointOfContact.length ? pointOfContact : undefined,
         constraint: [constraintEntry],
-        format: (prod.format === 'other' ? prod.formatOther : prod.format) || undefined
+        format: (prod.format === 'other' ? prod.formatOther : prod.format) || undefined,
+        resourceMaintenance: [{maintenanceFrequency: 'asNeeded'}]
       },
       resourceLineage: lineageParts.length ? [{statement: lineageParts.join('\n\n')}] : undefined,
       resourceDistribution: resourceDistribution,
@@ -3324,6 +3449,12 @@ function loadStateFromObject(obj){
       if(src && Object.prototype.hasOwnProperty.call(src, k)){
         if(Array.isArray(target[k])){
           target[k] = src[k] || [];
+        } else if(k === 'purposeSelections' && src[k] && typeof src[k] === 'object'){
+          // Dynamically-keyed map (one boolean per Purpose checkbox) --
+          // recursing key-by-key like the generic object branch below
+          // would silently drop every selection, since target[k] starts as
+          // an empty {} with no keys of its own to iterate over.
+          target[k] = Object.assign({}, src[k]);
         } else if(typeof target[k] === 'object' && target[k] !== null){
           merge(target[k], src[k]);
         } else {
