@@ -378,7 +378,7 @@ function defaultState(){
          updateDate:"", updaterFirstName:"", updaterLastName:"", updaterEmail:"",
          submitDate:"", dmFirstName:"", dmLastName:"", dmEmail:"", documentPath:""},
     project:{region:"", programs:[], costCenters:[], title:"", startDate:"", endDate:"", ongoing:false,
-             abstract:"", purpose:"", purposeSelections:{}, purposeOtherText:"", keywords:"", uidList:"", spatialDesc:"", spatialURL:""},
+             abstract:"", purpose:"", purposeSelections:{}, purposeOtherText:"", themeKeywords:"", placeKeywords:"", uidList:"", spatialDesc:"", spatialURL:""},
     contacts:{
       primary:emptyContact(), steward:emptyContact(),
       custodian:Object.assign(emptyContact(),{nonDOI:false}),
@@ -617,7 +617,12 @@ function bridgeBuildRows(data){
   rows.push(['projectOngoing', _b(p.ongoing)]);
   rows.push(['projectAbstract', _s(p.abstract)]);
   rows.push(['projectPurpose', _s(p.purpose)]); // maps to mdJSON resourceInfo.purpose
-  rows.push(['projectKeywords', _s(p.keywords)]);
+  rows.push(['projectThemeKeywords', _s(p.themeKeywords)]);
+  rows.push(['projectPlaceKeywords', _s(p.placeKeywords)]);
+  // Backward-compat combined field, still consumed by older downstream
+  // code (e.g. the SharePoint list export cell in the notebook) that
+  // expects a single comma-separated projectKeywords value.
+  rows.push(['projectKeywords', [_s(p.themeKeywords), _s(p.placeKeywords)].filter(Boolean).join(', ')]);
   rows.push(['projectUIDList', _s(p.uidList)]);
   rows.push(['projectSpatialDesc', _s(p.spatialDesc)]);
   rows.push(['projectSpatialURL', _s(p.spatialURL)]);
@@ -1850,8 +1855,9 @@ function buildProjectPanel(idx){
     purposePreview
   ]));
 
-  p.appendChild(card('Keywords', null, [
-    fieldWrap('Keywords', false, 'Comma-separated, e.g. "walrus, haulout, Bering Sea"', textInput(proj,'keywords'))
+  p.appendChild(card('Keywords', 'Keywords help others discover this project and its data. Provide comma-separated terms for whichever category applies -- either or both boxes can be filled in.', [
+    fieldWrap('Theme Keywords', false, 'Comma-separated, e.g. "walrus, haulout, population estimate"', textInput(proj,'themeKeywords')),
+    fieldWrap('Place Keywords', false, 'Comma-separated, e.g. "Alaska, Bering Sea"', textInput(proj,'placeKeywords')),
   ]));
 
   p.appendChild(card('Identifiers', null, [
@@ -2968,7 +2974,8 @@ function buildDmpDocumentHTML(){
   parts.push(docField('Timeline', (s.project.startDate||'—') + ' \u2192 ' + (s.project.ongoing ? 'ongoing' : (s.project.endDate||'—'))));
   parts.push(docPara('Abstract', s.project.abstract));
   if(s.project.purpose) parts.push(docPara('Purpose', s.project.purpose));
-  parts.push(docField('Keywords', s.project.keywords));
+  parts.push(docField('Theme keywords', s.project.themeKeywords));
+  parts.push(docField('Place keywords', s.project.placeKeywords));
   parts.push(docField('Project identifier / tracking number', s.project.uidList));
   parts.push(docField('Spatial extent description', s.project.spatialDesc));
   parts.push(docField('Spatial extent URL', s.project.spatialURL));
@@ -3135,6 +3142,72 @@ function fetchAllProfilesSchemas(){
   })).then(results => results.filter(Boolean));
 }
 
+// Static default keyword blocks -- ISO 19115 Topic Category and GCMD
+// Science Keywords -- always included in metadata.resourceInfo.keyword,
+// matching keywordsExample_mdeditor-*.json. Mirrors the equivalent cell
+// in DMP_to_metadata_from_interface.ipynb; keep both in sync if these
+// ever need to change.
+function buildDefaultKeywordBlocks(){
+  const isoTopic = {
+    keyword: [{identifier: '002', keyword: 'biota', path: ['biota']}],
+    keywordType: 'isoTopicCategory',
+    thesaurus: {
+      date: [{date: '2014-04', dateType: 'revision'}],
+      title: 'ISO 19115 Topic Category',
+      edition: 'ISO 19115-1:2014',
+      onlineResource: [{uri: 'https://doi.org/10.18123/D6RP4M'}],
+      identifier: [{identifier: 'ISO 19115 Topic Category'}]
+    },
+    fullPath: true
+  };
+  const gcmd = {
+    keyword: [{
+      identifier: '14802b53-b702-438f-8c8a-f51506807ce6',
+      keyword: 'Science Keywords > EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES',
+      path: ['Science Keywords', 'EARTH SCIENCE', 'BIOLOGICAL CLASSIFICATION', 'ANIMALS/VERTEBRATES']
+    }],
+    keywordType: 'theme',
+    thesaurus: {
+      date: [{date: '2018-12-12', dateType: 'revision'}],
+      description: 'GCMD Science Keywords Example Description',
+      title: 'Global Change Master Directory (GCMD) Science Keywords',
+      edition: 'Version 8.6',
+      onlineResource: [{uri: 'https://earthdata.nasa.gov/gcmd-forum'}],
+      identifier: [{identifier: '1eb0ea0a-312c-4d74-8d42-6f1ad758f999'}]
+    },
+    fullPath: true
+  };
+  return [isoTopic, gcmd];
+}
+
+// Builds the full metadata.resourceInfo.keyword array: Theme Keywords (if
+// any) -> the two static defaults above (always included) -> Place
+// Keywords (if any). Each category gets its own thesaurus block, matching
+// keywordsExample_mdeditor-*.json.
+function buildKeywordBlocks(proj){
+  const blocks = [];
+  const themeList = (proj.themeKeywords || '').split(',').map(k => k.trim()).filter(Boolean);
+  if(themeList.length){
+    blocks.push({
+      keyword: themeList.map(k => ({keyword: k})),
+      keywordType: 'theme',
+      thesaurus: {identifier: [{identifier: 'custom'}], title: 'Keywords from Data Management Plan'},
+      fullPath: true
+    });
+  }
+  blocks.push(...buildDefaultKeywordBlocks());
+  const placeList = (proj.placeKeywords || '').split(',').map(k => k.trim()).filter(Boolean);
+  if(placeList.length){
+    blocks.push({
+      keyword: placeList.map(k => ({keyword: k})),
+      keywordType: 'place',
+      thesaurus: {identifier: [{identifier: 'custom'}], title: 'place keywords'},
+      fullPath: true
+    });
+  }
+  return blocks;
+}
+
 function buildProjectRecord(resolved, projectUuid, productUuids){
   const proj = state.project;
 
@@ -3155,13 +3228,7 @@ function buildProjectRecord(resolved, projectUuid, productUuids){
   if(resolved.steward) citationResponsibleParty.push(roleEntry(resolved.steward, 'pointOfContact'));
   if(resolved.regionContact) citationResponsibleParty.push(roleEntry(resolved.regionContact, 'publisher'));
 
-  const keywordList = (proj.keywords || '').split(',').map(k => k.trim()).filter(Boolean);
-  const keyword = keywordList.length ? [{
-    keyword: keywordList.map(k => ({keyword: k})),
-    keywordType: 'theme',
-    thesaurus: {identifier: [{identifier: 'custom'}], title: 'Keywords from Data Management Plan'},
-    fullPath: true
-  }] : undefined;
+  const keyword = buildKeywordBlocks(proj);
 
   const dateArr = [];
   if(proj.startDate) dateArr.push({date: proj.startDate + 'T00:00:00.000Z', dateType: 'start'});
@@ -3464,6 +3531,14 @@ function loadStateFromObject(obj){
     }
   }
   merge(fresh, obj);
+  // Backward compatibility: older exports (pre theme/place keyword split)
+  // used a single 'keywords' field. If loading one of those, the new
+  // split fields will still be empty after merge (since 'keywords' isn't
+  // a key on the fresh default state for merge() to copy into) -- migrate
+  // the old value into Theme Keywords instead of silently losing it.
+  if(obj && obj.project && obj.project.keywords && !fresh.project.themeKeywords && !fresh.project.placeKeywords){
+    fresh.project.themeKeywords = obj.project.keywords;
+  }
   state = fresh;
 }
 

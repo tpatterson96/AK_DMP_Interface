@@ -162,7 +162,19 @@ def build_dataframe(json_path, dmp_version_default="1.3"):
     rows.append(("projectOngoing", _b(p.get("ongoing"))))
     rows.append(("projectAbstract", _s(p.get("abstract"))))
     rows.append(("projectPurpose", _s(p.get("purpose"))))  # NEW -- maps to mdJSON resourceInfo.purpose
-    rows.append(("projectKeywords", _s(p.get("keywords"))))
+    #rows.append(("projectKeywords", _s(p.get("keywords"))))  
+    # The "keywords" field in the DMP_Interface.html JSON is now split into two separate arrays: "themeKeywords" and "placeKeywords". The original notebook code combined these into a single "projectKeywords" field, but we now store them separately for clarity and backward compatibility.
+    rows.append(("projectThemeKeywords", _s(p.get("themeKeywords"))))
+    rows.append(("projectPlaceKeywords", _s(p.get("placeKeywords"))))
+    # Backward-compat combined field, still consumed by older downstream
+    # code (e.g. the SharePoint list export cell in the notebook) that
+    # expects a single comma-separated projectKeywords value.
+    _combined_kw = ", ".join(
+        [v for v in [_s(p.get("themeKeywords")), _s(p.get("placeKeywords"))] if v]
+    )
+    rows.append(("projectKeywords", _combined_kw))
+
+
     rows.append(("projectUIDList", _s(p.get("uidList"))))
     rows.append(("projectSpatialDesc", _s(p.get("spatialDesc"))))
     rows.append(("projectSpatialURL", _s(p.get("spatialURL"))))
