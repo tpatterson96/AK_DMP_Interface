@@ -810,7 +810,10 @@ const METADATA_GEN_SETTINGS = {
   // PROGRAM_CONTACT_ID below) -- CMT.csv is the only file kept loadable
   // here, since it's large (1800+ rows) and organization-specific in a way
   // the Region/Program tables are not.
-  cmtCsvURL: ''
+  cmtCsvURL: '',
+  // Records Disposition lookup source file (Records Schedule tab -- see
+  // the "RECORDS DISPOSITION LOOKUP" section below).
+  recordsCsvURL: ''
 };
 
 /* =========================================================================
@@ -983,6 +986,53 @@ function computeCostCenterCredits(){
 }
 
 /* =========================================================================
+   RECORDS DISPOSITION LOOKUP -- RecordsDispositionList.csv, loadable on the
+   Setup tab. When loaded, selecting a Records Schedule on the Records
+   Schedule tab auto-fills Records Type and Records Disposition from the
+   matching row, instead of typing all three by hand. Falls back to the
+   original free-text/combo-box entry (OPT_RECORDS_SCHEDULE) until loaded.
+
+   COLUMN LAYOUT (by position, not header name -- confirmed against the
+   real file): column 1 = Records Schedule, column 2 = Records Type,
+   column 3 = Records Disposition. Row 1 is a header row and is skipped.
+   ========================================================================= */
+let RECORDS_DISPOSITION_DATA = null;   // array of {Schedule, Type, Disposition}
+let RECORDS_DISPOSITION_SOURCE = 'Not loaded';
+
+// Reads RecordsDispositionList.csv by COLUMN POSITION (1st col = Schedule,
+// 2nd = Type, 3rd = Disposition) rather than matching header text, since
+// the header wording itself isn't guaranteed. Row 1 is always treated as
+// a header row and skipped, matching every other CSV loader in this file.
+function recordsDispositionRowsFromCSVText(text){
+  const rows = parseCSV(text);
+  if(rows.length < 2) return [];
+  return rows.slice(1)
+    .filter(r => r.some(cell => (cell || '').trim() !== ''))
+    .map(r => ({
+      Schedule: (r[0] || '').trim(),
+      Type: (r[1] || '').trim(),
+      Disposition: (r[2] || '').trim()
+    }))
+    .filter(r => r.Schedule);
+}
+
+// Finds the RECORDS_DISPOSITION_DATA row matching a given schedule value.
+// Tries an exact match first, then falls back to matching just the
+// leading code token (e.g. "PERM-250" out of "PERM-250   Biological
+// Monitoring Files   (N1-022-05-01/101)"), so this still works if a
+// records-schedule entry saved before the CSV was loaded used the old
+// OPT_RECORDS_SCHEDULE combo-box text instead of the CSV's exact string.
+function findRecordsDispositionRow(scheduleValue){
+  if(!RECORDS_DISPOSITION_DATA || !scheduleValue) return null;
+  const exact = RECORDS_DISPOSITION_DATA.find(r => r.Schedule === scheduleValue);
+  if(exact) return exact;
+  const codeMatch = String(scheduleValue).match(/^\S+/);
+  if(!codeMatch) return null;
+  const code = codeMatch[0];
+  return RECORDS_DISPOSITION_DATA.find(r => r.Schedule.startsWith(code)) || null;
+}
+
+/* =========================================================================
    DESKTOP MODE (pywebview) DETECTION
    ========================================================================= */
 let DESKTOP_MODE = false;
@@ -1082,7 +1132,9 @@ function saveMetadataGenToStorage(){
       regionProgramExport: REGION_PROGRAM_EXPORT ? REGION_PROGRAM_EXPORT.map(c => c.rawRecord) : null,
       regionProgramExportSource: REGION_PROGRAM_EXPORT_SOURCE,
       cmtData: CMT_DATA,
-      cmtDataSource: CMT_DATA_SOURCE
+      cmtDataSource: CMT_DATA_SOURCE,
+      recordsDispositionData: RECORDS_DISPOSITION_DATA,
+      recordsDispositionSource: RECORDS_DISPOSITION_SOURCE
     }));
   }catch(e){ /* non-fatal, e.g. quota exceeded on a very large contacts file */ }
 }
@@ -1105,6 +1157,10 @@ function tryRestoreMetadataGen(){
       CMT_DATA = saved.cmtData;
       CMT_DATA_SOURCE = saved.cmtDataSource || 'Restored from last session';
       deriveProgramCodeMap();
+    }
+    if(Array.isArray(saved.recordsDispositionData) && saved.recordsDispositionData.length){
+      RECORDS_DISPOSITION_DATA = saved.recordsDispositionData;
+      RECORDS_DISPOSITION_SOURCE = saved.recordsDispositionSource || 'Restored from last session';
     }
   }catch(e){ /* fall back to nothing loaded */ }
 }
@@ -2223,17 +2279,47 @@ function buildRecordsPanel(idx){
     'Records disposition schedules applicable to this project\u2019s data and products. See the Preservation & Distribution tab for the Regional Data Repository and public repositories.'));
 
   const recContainer = h('div');
-  p.appendChild(card('Records Schedule and Disposition', 'Your data manager or Regional Records Manager can assist in determining the applicable records schedule(s) and disposition(s). You may also type a schedule name if it is not found in the list.', [recContainer]));
+  const recCardDesc = RECORDS_DISPOSITION_DATA
+    ? 'Select a records schedule below -- Records Type and Records Disposition fill in automatically from ' + h('code',{},['RecordsDispositionList.csv']).outerHTML + ', loaded on the Setup tab. You can still edit Type/Disposition afterward if needed.'
+    : 'Your data manager or Regional Records Manager can assist in determining the applicable records schedule(s) and disposition(s). You may also type a schedule name if it is not found in the list. Load ' + h('code',{},['RecordsDispositionList.csv']).outerHTML + ' on the Setup tab to auto-fill Type and Disposition from a schedule selection instead.';
+  p.appendChild(card('Records Schedule and Disposition', h('span', {html: recCardDesc}), [recContainer]));
   renderRepeatable(recContainer, d.recordsSchedules, {
     itemLabel:(v,i)=>'Records entry '+(i+1), emptyText:'No records schedule added.', addLabel:'+ Add a records schedule',
     makeNew: emptyRecordsSchedule,
-    renderItem:(item)=> h('div',{},[
-      fieldWrap('Records schedule', true, null, comboInput(item,'schedule',OPT_RECORDS_SCHEDULE)),
-      grid(2, [
-        fieldWrap('Records type', true, null, textInput(item,'type')),
-        fieldWrap('Records disposition', true, null, textInput(item,'disposition')),
-      ])
-    ])
+    renderItem:(item)=> {
+      if(RECORDS_DISPOSITION_DATA){
+        const scheduleOptions = RECORDS_DISPOSITION_DATA.map(r => r.Schedule);
+        const typeInput = textInput(item,'type');
+        const dispInput = textInput(item,'disposition');
+        const scheduleSel = selectInput(item,'schedule',scheduleOptions,{
+          placeholder:'Select a records schedule...',
+          onChange: (val) => {
+            const row = findRecordsDispositionRow(val);
+            if(row){
+              item.type = row.Type;
+              item.disposition = row.Disposition;
+              typeInput.value = row.Type;
+              dispInput.value = row.Disposition;
+              onDirty();
+            }
+          }
+        });
+        return h('div',{},[
+          fieldWrap('Records schedule', true, null, scheduleSel),
+          grid(2, [
+            fieldWrap('Records type', true, 'Auto-filled from the selected schedule; editable if needed.', typeInput),
+            fieldWrap('Records disposition', true, 'Auto-filled from the selected schedule; editable if needed.', dispInput),
+          ])
+        ]);
+      }
+      return h('div',{},[
+        fieldWrap('Records schedule', true, null, comboInput(item,'schedule',OPT_RECORDS_SCHEDULE)),
+        grid(2, [
+          fieldWrap('Records type', true, null, textInput(item,'type')),
+          fieldWrap('Records disposition', true, null, textInput(item,'disposition')),
+        ])
+      ]);
+    }
   });
 
   p.appendChild(panelFooter(idx));
@@ -2660,6 +2746,33 @@ function buildSetupPanel(){
     cmtCard.appendChild(h('div', {class:'note'}, ['Loaded, but no FWS Program could be matched against this file\u2019s Program column \u2014 Cost Center filtering will use Region only. Check that CMT.csv has a Program column with recognizable text (e.g. containing "Ecological Services", "Migratory Birds", etc.), or add entries to PROGRAM_CMT_CODE_OVERRIDE in the script.']));
   }
   p.appendChild(cmtCard);
+
+  /* ---- Records Disposition lookup (RecordsDispositionList.csv) ---- */
+  const recCard = h('div', {class:'card'});
+  recCard.appendChild(h('h3',{},['Records Disposition List']));
+  recCard.appendChild(h('p',{class:'card-desc'},['Used on the Records Schedule tab: selecting a Records Schedule auto-fills Records Type and Records Disposition from the matching row in this file. Expects columns for Schedule, Type, and Disposition (header names are matched flexibly -- e.g. "RecordsType" or "Records Type" both work). Until this is loaded, the Records Schedule tab falls back to manual entry (a fixed schedule list plus free-text Type/Disposition fields).']));
+  recCard.appendChild(buildFileUrlLoader({
+    label: 'RecordsDispositionList.csv',
+    desc: 'Records schedule / type / disposition directory.',
+    urlKey: 'recordsCsvURL',
+    accept: '.csv,text/csv',
+    getStatus: () => RECORDS_DISPOSITION_DATA ? (RECORDS_DISPOSITION_DATA.length + ' schedule row' + (RECORDS_DISPOSITION_DATA.length===1?'':'s') + ' loaded — ' + RECORDS_DISPOSITION_SOURCE) : 'Not loaded — Records Schedule tab will use manual entry until this is loaded.',
+    onLoadText: (text, sourceLabel) => {
+      const rows = recordsDispositionRowsFromCSVText(text);
+      if(rows.length === 0){
+        toast('No usable rows found in that CSV. Expecting columns for Schedule, Type, and Disposition (see the Records Disposition List card description).');
+        return;
+      }
+      RECORDS_DISPOSITION_DATA = rows;
+      RECORDS_DISPOSITION_SOURCE = sourceLabel;
+      saveMetadataGenToStorage();
+      toast('Loaded ' + rows.length + ' records schedule rows.');
+      rebuildPanel('setup');
+      rebuildPanel('records');
+    },
+    onClear: () => { RECORDS_DISPOSITION_DATA = null; RECORDS_DISPOSITION_SOURCE = 'Not loaded'; saveMetadataGenToStorage(); toast('Cleared Records Disposition List.'); rebuildPanel('setup'); rebuildPanel('records'); }
+  }));
+  p.appendChild(recCard);
 
   /* ---- Contacts export ---- */
   const contactsCard = h('div', {class:'card'});
