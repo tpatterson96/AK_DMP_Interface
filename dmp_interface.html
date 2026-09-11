@@ -308,7 +308,7 @@ body.printing-dmp-doc #print-doc{display:block;}
       </g></svg>
       <div class="eyebrow">USFWS</div>
       <h1>Data Management Plan</h1>
-      <div class="sub">Interface v1.3 · replaces the Word template</div>
+      <div class="sub">Interface · replaces the Alaska DMP Word template v1.3</div>
     </div>
     <ul id="nav"></ul>
     <div id="sidebar-foot">
@@ -425,18 +425,18 @@ const PURPOSE_OPTIONS = [
   {key:'esaListing', text:'ESA listing decision: project contributes or is cited in an Endangered Species Act listing decision'},
   {key:'speciesStatusAssessment', text:'Species Status Assessment: project contributes or is cited in a Species Status Assessment'},
   {key:'permittedSpeciesAssessment', text:'Assessment of the status of permitted species or permitting; project is used in an analysis to estimate allowable take or to issue permits'},
-  {key:'mbpFinancialAwards', text:'MBP Financial awards: project is used by Migratory Bird Program to allocate funds for conservation or habitat management'},
+  {key:'mbpFinancialAwards', text:'Financial awards: Program allocate funds for conservation or habitat management project to fill knowledge gaps'},
   {key:'damageAssessment', text:'Damage Assessment: project is used to evaluate damages under a Natural Resource Damage Assessment'},
   {key:'environmentalImpactAssessment', text:'Environmental Impact Assessment: project is used to conduct Environmental Impact Assessments under the National Environmental Policy Act'},
   {key:'prioritizedSpeciesListings', text:'Prioritized species listings: project is used to determine if a species should be added to a recognized conservation list'},
-  {key:'managementActionEvaluation', text:'Evaluation of the impact of management actions (e.g., Refuge staff)'},
+  {key:'managementActionEvaluation', text:'Evaluation of the impact of management actions'},
   {key:'landAcquisition', text:'Land acquisition: project is used by land management agencies to acquire land through easement, lease, or purchase'},
   {key:'damageResponsePlanning', text:'Damage response planning: project is used in products created to guide response to disasters and accidents (e.g., National Oceanic & Atmospheric Administration coastal resource maps to aid oil spill response)'},
   {key:'informalHarvestManagement', text:'Informal harvest management: project is considered in harvest management decisions in the absence of a formal model or threshold value'},
   {key:'habitatManagement', text:'Habitat management: project is used to guide ongoing habitat management (e.g., decisions about mowing, burning, planting, or water diversion)'},
   {key:'conservationAreaIdentification', text:'Identification of areas of conservation value: project is used in maps and other products to identify areas of conservation concern or for protection'},
   {key:'statusTrendsMonitoring', text:'Status & Trends monitoring: project is used to monitor a population and identify population sizes or changes in population size requiring conservation action or control'},
-  {key:'scientificAnalysis', text:'Scientific analysis: project is used for research to understand the biology or ecology of a migratory bird species'},
+  {key:'scientificAnalysis', text:'Scientific analysis: project is used for research to understand the biology or ecology of a species'},
   {key:'largeRangeCoverage', text:'The area covered includes a large proportion of the species\' breeding or wintering range or staging and migration areas utilized by the majority of the population; significant areas might also be defined for population sub-groups of management importance (e.g., stocks or sub-species).'},
   {key:'longTimeSeries', text:'The project is part of a long time series on the life history of the species or habitat with a run of at least 10 years. The methods of data collection are sufficiently consistent, so that the data can be calibrated and analyzed as a single time series.'},
   {key:'onlyAvailableData', text:'The project represents the only information being collected, i.e., no other data are available describing a species status, trend, or distribution, or there are no other data available describing the characteristics of an area/habitat and its use by migratory birds.'},
@@ -1542,7 +1542,7 @@ function attachFileBrowseButton(inputEl, obj, key, opts){
     inputEl.value = name;
     obj[key] = name;
     onDirty();
-    toast('Selected "' + name + '" — browsers can\'t reveal the full ' + (opts.directory ? 'parent folder path' : 'folder path') + ', so add the network path in front of it if one is needed.');
+    toast('Selected "' + name + '" — browsers may not reveal the full ' + (opts.directory ? 'parent folder path' : 'folder path') + ', so check that the network path is correctly specified.');
     fileInput.value = '';
   });
   const browseBtn = h('button', {type:'button', class:'btn-linklike', style:'flex:0 0 auto; white-space:nowrap;', onclick: () => fileInput.click()}, [opts.directory ? 'Browse folder…' : 'Browse file…']);
@@ -1780,7 +1780,7 @@ function buildProjectPanel(idx){
     const programFilterActive = loaded && (state.project.programs || []).some(pv => programCmtCode(pv));
     ccNoteContainer.appendChild(h('div', {class:'note'}, [
       loaded
-        ? ('Cost Center options below are filtered to the FWS Region selected above' + (programFilterActive ? ', narrowed by FWS Program using a mapping derived automatically from ' : ' using ') )
+        ? ('Cost Center options below are filtered to the FWS Region selected above' + (programFilterActive ? ', then narrowed by FWS Program derived automatically from ' : ' using ') )
         : 'Load ',
       h('code',{},['CMT.csv']),
       loaded ? ' loaded on the ' : ' on the ',
@@ -1831,7 +1831,7 @@ function buildProjectPanel(idx){
   renderCostCenterContainer();
 
   p.appendChild(card('Project Title', null, [
-    fieldWrap('Project title', true, 'A title should convey meaningful information, such as focal species, season, method, purpose, spatial extent, and/or temporal extent.', textareaInput(proj,'title',{rows:2})),
+    fieldWrap('Project title', true, 'A title should convey meaningful information, such as location, locality, focal species or cohort, season, method or purpose descriptor, and temporal extent. Example: Alaska Arctic Coastal Plain endangered King Eider Breeding Bird Nest Survey 2023-present', textareaInput(proj,'title',{rows:2})),
   ]));
 
   const endDateWrap = h('div', {id:'end-date-wrap'});
@@ -1905,7 +1905,7 @@ function buildProjectPanel(idx){
   buildPurposeOtherField();
   refreshPurposePreview();
 
-  p.appendChild(card('Purpose', 'Please check the usage description(s) that are relevant for this investigation. Checking any box (re)builds the Purpose text below from the selected descriptions -- distinct from the Abstract, which summarizes what the project is. Maps to the mdJSON metadata.resourceInfo.purpose field.', [
+  p.appendChild(card('Purpose', 'Please check the usage description(s) that are relevant for this investigation. Checking any box that appliess. The text builds a purpose statement -- distinct from the Abstract.', [
     purposeContainer,
     h('div', {class:'subsection-label'}, ['Preview of Purpose metadata text']),
     purposePreview
@@ -1917,7 +1917,7 @@ function buildProjectPanel(idx){
   ]));
 
   p.appendChild(card('Identifiers', null, [
-    fieldWrap('Project identifier code / tracking number', false, 'If this is a Refuge project, list the PRIMR ID (required). If your project does not already have a tracking code, one will be generated by your data manager.', textInput(proj,'uidList'))
+    fieldWrap('Project identifier code / tracking number', false, 'If this is a Refuge project, list the PRIMR ID (required). If your project does not already have a tracking code, one will be generated by your data manager. If using a repository ID, enter it here if known.', textInput(proj,'uidList'))
   ]));
 
   const spatialURLInput = textInput(proj,'spatialURL');
@@ -1930,7 +1930,7 @@ function buildProjectPanel(idx){
   p.appendChild(card('Spatial Extent', 'Spatial features should be provided in latitude and longitude coordinates (WGS84). Files must use the full server name instead of a mapped drive letter.', [
     grid(2, [
       fieldWrap('Spatial extent description', true, 'A named geographic area', textInput(proj,'spatialDesc')),
-      fieldWrap('Spatial extent URL', false, 'Link to a shapefile, geoJSON, KML, GPX, etc. "Browse file…" fills in the filename only — browsers can\'t reveal the full folder path — so add the network path in front of it afterward.', spatialURLRow),
+      fieldWrap('Spatial extent URL', false, 'Link to a shapefile, geoJSON, KML, GPX, etc. "Browse file…" fills in the field, please check that the path is correct before submitting. If using a local file, be sure to share the file with your data manager.', spatialURLRow),
     ])
   ]));
 
@@ -2091,7 +2091,7 @@ function buildMetadataPanel(idx){
 
   p.appendChild(card('Metadata Standard *', null, [
     checkboxRow('The project and its data products will be documented with metadata created in mdEditor.',
-      'Metadata will be written by project personnel to meet regional, programmatic, and national standards and will be reviewed, approved, and maintained.',
+      'Metadata will be written by and maintained current by the project primary contact and/or Data Steward to meet regional, programmatic, and national standards and will be reviewed by a data manager.',
       ms, 'mdJSON'),
     checkboxRow('Other standard will be used', 'If checked, choose the standard below.', ms, 'other', {onChange:buildOtherType}),
     otherTypeWrap
@@ -2171,7 +2171,7 @@ function buildStoragePanel(idx){
   ]));
 
   p.appendChild(card('Data Review Schedule *', null, [
-    fieldWrap('Most relevant data review schedule', true, null, selectInput(st,'reviewSchedule',OPT_REVIEW_SCHEDULE,{placeholder:'Select...'}))
+    fieldWrap('How often will the data and metadata be reviewed?', true, null, selectInput(st,'reviewSchedule',OPT_REVIEW_SCHEDULE,{placeholder:'Select...'}))
   ]));
 
   p.appendChild(panelFooter(idx));
@@ -2244,13 +2244,13 @@ function buildDistributionPanel(idx){
   };
   buildRdrUrl();
 
-  p.appendChild(card('Internal Preservation Repository', 'Long-term preservation of this project and its products will follow the Alaska Regional Model, maintaining data assets including metadata in a preservation folder in an internal, read-only repository.', [
+  p.appendChild(card('Internal Preservation Repository', 'Long-term preservation of this project and its products that follow the Alaska Region Model maintain data assets including metadata in a preservation folder on an internal, read-only repository server. Complete this section to identify the project preservation folder or to create a preservation folder.', [
     checkboxRow('Preserve this project in a Regional Data Repository (RDR)', null, d, 'rdrChecked'),
     rdrUrlWrap
   ]));
 
   const repoContainer = h('div');
-  p.appendChild(card('Public Data Sharing Repositories', 'Unless otherwise specified, all data and products are assumed to be public domain (open access). Identify publicly accessible repositories where a copy of the data and metadata will be shared. Refuge staff are required to preserve data assets in ServCat.', [
+  p.appendChild(card('Public Data Sharing Repositories', 'Unless otherwise specified, all data and products are assumed to be public domain (open access). Identify publicly accessible repositories where a copy of the data and metadata will be shared. Refuge policy is to post data assets in ServCat.', [
     h('div', {class:'note'}, [
       'The list of repository options in the dropdown below is managed on the ',
       h('a', {href:'#', onclick:(e)=>{ e.preventDefault(); showSection('setup'); }}, ['Setup']),
@@ -2280,7 +2280,7 @@ function buildRecordsPanel(idx){
 
   const recContainer = h('div');
   const recCardDesc = RECORDS_DISPOSITION_DATA
-    ? 'Select a records schedule below -- Records Type and Records Disposition fill in automatically from ' + h('code',{},['RecordsDispositionList.csv']).outerHTML + ', loaded on the Setup tab. You can still edit Type/Disposition afterward if needed.'
+    ? 'Select a records schedule below -- Records Type and Records Disposition fill in automatically from ' + h('code',{},['RecordsDispositionList.csv']).outerHTML + ', loaded on the Setup tab. You can still edit Type/Disposition afterward, if needed.'
     : 'Your data manager or Regional Records Manager can assist in determining the applicable records schedule(s) and disposition(s). You may also type a schedule name if it is not found in the list. Load ' + h('code',{},['RecordsDispositionList.csv']).outerHTML + ' on the Setup tab to auto-fill Type and Disposition from a schedule selection instead.';
   p.appendChild(card('Records Schedule and Disposition', h('span', {html: recCardDesc}), [recContainer]));
   renderRepeatable(recContainer, d.recordsSchedules, {
@@ -2330,7 +2330,7 @@ function buildRecordsPanel(idx){
 function buildProductsPanel(idx){
   const p = h('div', {class:'panel', id:'panel-products'});
   p.appendChild(panelHead('Section 8', 'Data Products',
-    'Detail each distinct digital data product anticipated to be produced during the project — spreadsheets, databases, statistical models, maps, photo/video collections, reports, etc. Sections where information does not yet exist can be set to "TBD".'));
+    'Detail each distinct digital data product anticipated to be produced during the project — design documentation, procedural documents, spreadsheets/tabular datasets, statistical models, maps, photo/video files, reports, etc. Sections where information does not yet exist can be set to "TBD".'));
 
   const prodContainer = h('div');
   p.appendChild(prodContainer);
@@ -2379,7 +2379,7 @@ function renderProductItem(prod){
   ]);
   wrap.appendChild(grid(2,[
     fieldWrap('File name', true, null, textInput(prod,'name')),
-    fieldWrap('File URL / path', false, '"Browse file…" fills in the filename only — browsers can\'t reveal the full folder path — so add the network path in front of it afterward.', prodURLRow),
+    fieldWrap('File URL / path', false, '"Browse file…" fills in the filename, check that the network path is correct.', prodURLRow),
   ]));
   wrap.appendChild(fieldWrap('File versioning notes', false, 'Description of file versioning conventions, if needed.', textInput(prod,'fileVersioning')));
 
