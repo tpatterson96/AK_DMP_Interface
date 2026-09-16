@@ -1,0 +1,31 @@
+@echo off
+REM ============================================================
+REM  Setup_And_Run_Desktop_App.bat
+REM  First run: installs pywebview + pandas (only if missing),
+REM  then launches the AK DMP desktop app.
+REM  Requires Python to already be installed on this machine.
+REM ============================================================
+
+where python >nul 2>nul
+if errorlevel 1 (
+    echo Python was not found on this machine. Install Python 3.x first
+    echo ^(from python.org, or your agency's approved software portal^),
+    echo then run this file again.
+    pause
+    exit /b 1
+)
+
+echo Checking required packages...
+python -m pip install --quiet --disable-pip-version-check -r "%~dp0requirements.txt"
+if errorlevel 1 (
+    echo.
+    echo Package install failed. If this machine has no internet access,
+    echo an administrator may need to install pywebview and pandas manually
+    echo or from an internal package mirror.
+    pause
+    exit /b 1
+)
+
+echo Starting AK Region DMP Interface (desktop app)...
+python "%~dp0dmp_desktop_app.py"
+pause
