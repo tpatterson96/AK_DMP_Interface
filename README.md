@@ -16,17 +16,12 @@ happens in `DMP_to_metadata_from_interface.ipynb`.
 | `Launch_DMP_Interface.bat` | Double-click to open the interface in your default browser. |
 | `dmp_json_to_dataframe.py` | Bridge script. Turns the interface's JSON export into the same dataframe the notebook used to get by scraping a Word doc. |
 | `DMP_to_metadata_from_interface.ipynb` | A copy of `DMP_to_metadata.ipynb` with the Word-scraping cells swapped for the JSON bridge. Everything from "Pulling contacts" onward is untouched. |
-| `region_program_contacts.py` | Resolves the interface's "FWS Region" and "FWS Program" selections into mdEditor contact UUIDs. IDs are hardcoded (see below) — no CSV file is required. |
-| `FWSRegion_Program_Contacts_mdeditor-*.json` | mdEditor export of the FWS Region and FWS Program organization contact records. Loading this on the Setup tab lets the *full* contact record be embedded in generated metadata, not just a bare ID. |
-| `repository_options.csv` | Editable list of "Public Data Sharing Repositories" options for the dropdown in Preservation & Distribution. Edit this in Excel and load it into the interface's Setup tab to update the list. |
 | `dmp_desktop_app.py` | Optional desktop wrapper (pywebview). Runs the same interface in a native window with real Python behind it — see "Desktop app" below. |
 | `requirements.txt` | Python packages needed for the desktop app (`pywebview`, `pandas`). |
 | `Setup_And_Run_Desktop_App.bat` | Double-click to install the desktop app's requirements (first run only) and launch it. |
 
-**Not shipped in this folder, but referenced by the interface:** `CMT.csv`
-(your organization's cost center directory — large and specific to your
-region, so it isn't checked into this repo). You load it once on the Setup
-tab; see "Cost Center filtering" below.
+**Not shipped in this folder, but referenced by the interface:** `CMT.csv`, program contacts and personnel contact JSON files
+You load it once on the Setup tab.
 
 Nothing here requires a server or an internet connection to run. The `.html`
 file is self-contained — CSS and JavaScript are inline, there are no CDN
